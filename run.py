@@ -16,6 +16,7 @@ parser.add_argument('structure_id', type=str, help='the structure id or "all" to
 parser.add_argument('--behavior-pack', default=False, action='store_true', help='save to the first behavior pack in the world')
 parser.add_argument('--force', default=False, action='store_true', help='force save the structure file')
 parser.add_argument('--delete', default=False, action='store_true', help='delete structures')
+parser.add_argument('--out', '-o', type=str, default=None, help='custom directory to save the structure files')
 
 # adapted from https://github.com/minecraft-addon-tools/minecraft-addon-toolchain/blob/master/packages/minecraft-addon-toolchain/v1/index.js#L65-L94
 PATH_LOCATIONS = {
@@ -26,17 +27,27 @@ PATH_LOCATIONS = {
 }
 
 def get_worlds_folder() -> str:
-  worlds_folder = PATH_LOCATIONS[sys.platform]
+  worlds_folder = PATH_LOCATIONS.get(sys.platform)
 
-  if not worlds_folder:
-    print('Unsupported platform!')
-    exit(1)
-  elif not Path(worlds_folder).exists():
-    print('Could not find Minecraft Worlds folder!')
-    exit(1)
-  
-  worlds_folder = os.path.join(worlds_folder, 'games/com.mojang/minecraftWorlds')
-  return worlds_folder
+  # Check if automatic path is valid
+  if worlds_folder and Path(worlds_folder).exists():
+    auto_folder = os.path.join(worlds_folder, 'games/com.mojang/minecraftWorlds')
+    if Path(auto_folder).exists():
+      return auto_folder
+
+  # Fallback if unsupported platform or path doesn't exist
+  print('Could not automatically find the Minecraft Worlds folder!')
+  while True:
+    user_path = input('Please enter the exact path to your "minecraftWorlds" folder (or press Enter to exit):\n> ').strip()
+    
+    if not user_path:
+      print('Exiting.')
+      exit(1)
+      
+    if Path(user_path).exists():
+      return user_path
+    else:
+      print('That path does not exist. Please try again.\n')
 
 def save_structures (dir: str, structures: StructureDict, force: bool) -> None:
   for structure_id, nbt in structures.items():
@@ -88,15 +99,20 @@ def main():
 
   world_path = world_paths[args.world_name]
 
-  output_folder = world_path
-  if args.behavior_pack:
-    behavior_packs_path = os.path.join(world_path, 'behavior_packs')
-    behavior_pack = [ file.path for file in os.scandir(behavior_packs_path) if file.is_dir() ][0]
-    if not behavior_pack: 
-      print('Could not find behavior pack!')
-      exit(1)
-    else:
-      output_folder = behavior_pack
+  # Determine Output Folder
+  if args.out:
+    output_folder = args.out
+    Path(output_folder).mkdir(parents=True, exist_ok=True) # Ensure custom output folder exists
+  else:
+    output_folder = world_path
+    if args.behavior_pack:
+      behavior_packs_path = os.path.join(world_path, 'behavior_packs')
+      behavior_pack = [ file.path for file in os.scandir(behavior_packs_path) if file.is_dir() ][0]
+      if not behavior_pack: 
+        print('Could not find behavior pack!')
+        exit(1)
+      else:
+        output_folder = behavior_pack
 
   db_path = os.path.join(world_path, 'db')
   db = LevelDB(db_path)
